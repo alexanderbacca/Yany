@@ -6,11 +6,13 @@
     "jsx": "react-jsx",
     "strict": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
     "skipLibCheck": true,
     "noEmit": true,
     "esModuleInterop": true,
     "isolatedModules": true,
     "useDefineForClassFields": true
   },
-  "include": ["."]
+  "include": ["."],
+  "exclude": ["node_modules"]
 }
