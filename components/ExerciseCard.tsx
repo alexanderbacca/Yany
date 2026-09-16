@@ -28,9 +28,9 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-4">
-      <div className="aspect-video overflow-hidden rounded-2xl bg-white shadow-sm">
+      <div className="flex w-full max-h-[420px] items-center justify-center overflow-hidden rounded-2xl bg-gray-100 shadow-sm">
         {showPlaceholder ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-sky-100 to-blue-200">
+          <div className="flex min-h-56 w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-sky-100 to-blue-200">
             <span className="text-5xl">🏋️‍♀️</span>
             <span className="px-4 text-center font-medium text-slate-600">
               {step.name}
@@ -40,7 +40,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({
           <img
             src={step.imageUrl}
             alt={step.name}
-            className="h-full w-full object-cover"
+            className="mx-auto block h-auto max-h-[420px] max-w-full object-contain object-center"
             onError={() => setImgErrorFor(step.id)}
           />
         )}
