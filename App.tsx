@@ -9,6 +9,7 @@ import {
 } from './constants';
 import { AudioService } from './services/audio';
 import ExerciseCard from './components/ExerciseCard';
+import ProgressChart from './components/ProgressChart';
 
 type RunnerPhase = AppState.WARMUP | AppState.CIRCUIT | AppState.COOLDOWN;
 
@@ -314,6 +315,13 @@ const App: React.FC = () => {
         <p>🧘 Enfriamiento · 3 min</p>
       </div>
 
+      {sessions.length > 0 && (
+        <div className="w-full text-left">
+          <h2 className="mb-2 text-sm font-semibold text-gray-600">Tu semana</h2>
+          <ProgressChart sessions={sessions} />
+        </div>
+      )}
+
       <div className="grid w-full grid-cols-2 gap-3">
         <div className="rounded-xl bg-white p-3 shadow-sm">
           <p className="text-2xl font-bold text-blue-600">{currentStreak}</p>
@@ -442,12 +450,7 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div
-          id="chart-slot"
-          className="flex h-40 w-full items-center justify-center rounded-xl bg-white text-sm text-gray-400 shadow-sm"
-        >
-          Gráfico próximamente
-        </div>
+        <ProgressChart sessions={sessions} />
 
         <div className="flex flex-col gap-2">
           {lastTen.length === 0 ? (
