@@ -104,8 +104,18 @@ export class AudioService {
     window.speechSynthesis.speak(utterance);
   }
 
-  static announceExercise(name: string, target: string) {
-    this.speak(`${name}. ${target}. Vamos con calma y a tu ritmo.`);
+  static announceExercise(
+    name: string,
+    target: string,
+    phase: 'warmup' | 'main' | 'cooldown'
+  ) {
+    const encouragement =
+      phase === 'warmup' ? ' Vamos con calma y a tu ritmo.' : '';
+    this.speak(`${name}. ${target}.${encouragement}`);
+  }
+
+  static announceSwitchSide() {
+    this.speak('Cambia de lado. Ahora continúa con el otro lado.');
   }
 
   static announceRest() {

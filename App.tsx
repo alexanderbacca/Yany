@@ -7,12 +7,17 @@ import ProgressChart from './components/ProgressChart';
 import { useWakeLock } from './hooks/useWakeLock';
 
 type RunnerPhase = AppState.WARMUP | AppState.CIRCUIT | AppState.COOLDOWN;
-interface QueueEntry { step: ExerciseStep | null; seconds: number; isRest: boolean; afterRest?: ExerciseStep; phase: RunnerPhase; phaseIndex: number; phaseTotal: number; }
+interface QueueEntry { step: ExerciseStep | null; seconds: number; isRest: boolean; afterRest?: ExerciseStep; phase: RunnerPhase; phaseIndex: number; phaseTotal: number; side?: 'first' | 'second'; }
 interface SummaryStats { totalSec: number; exercisesDone: number; streak: number; partial: boolean; }
 const PHASE_LABEL: Record<RunnerPhase, string> = { [AppState.WARMUP]: 'Calentamiento', [AppState.CIRCUIT]: 'Circuito', [AppState.COOLDOWN]: 'Enfriamiento' };
 const PHASE_SPANISH_KEY: Record<RunnerPhase, 'calentamiento' | 'circuito' | 'enfriamiento'> = { [AppState.WARMUP]: 'calentamiento', [AppState.CIRCUIT]: 'circuito', [AppState.COOLDOWN]: 'enfriamiento' };
 const WORK_COLOR = '#2563eb';
 const REST_COLOR = '#06b6d4';
+const BILATERAL_COOLDOWN_IDS = new Set([
+  'estiramiento-cuadriceps',
+  'estiramiento-isquiotibiales',
+  'estiramiento-lateral',
+]);
 
 function buildQueue(): QueueEntry[] {
   const queue: QueueEntry[] = [];
@@ -21,7 +26,22 @@ function buildQueue(): QueueEntry[] {
     queue.push({ step, seconds: step.durationSec, isRest: false, phase: AppState.CIRCUIT, phaseIndex: i + 1, phaseTotal: CIRCUIT_STEPS.length });
     if (i < CIRCUIT_STEPS.length - 1) queue.push({ step: null, seconds: REST_SEC, isRest: true, afterRest: CIRCUIT_STEPS[i + 1], phase: AppState.CIRCUIT, phaseIndex: i + 2, phaseTotal: CIRCUIT_STEPS.length });
   });
-  COOLDOWN_STEPS.forEach((step, i) => queue.push({ step, seconds: step.durationSec, isRest: false, phase: AppState.COOLDOWN, phaseIndex: i + 1, phaseTotal: COOLDOWN_STEPS.length }));
+  COOLDOWN_STEPS.forEach((step, i) => {
+    const baseEntry = {
+      step,
+      isRest: false,
+      phase: AppState.COOLDOWN,
+      phaseIndex: i + 1,
+      phaseTotal: COOLDOWN_STEPS.length,
+    } as const;
+
+    if (BILATERAL_COOLDOWN_IDS.has(step.id)) {
+      queue.push({ ...baseEntry, seconds: 15, side: 'first' });
+      queue.push({ ...baseEntry, seconds: 15, side: 'second' });
+    } else {
+      queue.push({ ...baseEntry, seconds: step.durationSec });
+    }
+  });
   return queue;
 }
 
@@ -46,7 +66,7 @@ const App: React.FC = () => {
 
   useWakeLock(isRunning);
 
-  const announceEntry = (entry: QueueEntry) => { if (entry.isRest) { AudioService.announceRest(); if (entry.afterRest) AudioService.announceNext(entry.afterRest.name); } else if (entry.step) AudioService.announceExercise(entry.step.name, entry.step.target); };
+  const announceEntry = (entry: QueueEntry) => { if (entry.isRest) { AudioService.announceRest(); if (entry.afterRest) AudioService.announceNext(entry.afterRest.name); } else if (entry.step) { if (entry.side === 'second') { AudioService.announceSwitchSide(); } else { const phase = entry.phase === AppState.WARMUP ? 'warmup' : entry.phase === AppState.CIRCUIT ? 'main' : 'cooldown'; AudioService.announceExercise(entry.step.name, entry.step.target, phase); } } };
   const finalizeSession = (completed: boolean, exercisesDoneCount: number) => { const totalSec = Math.round((Date.now() - startTimeRef.current) / 1000); const entry: SessionEntry = { dateISO: new Date().toISOString(), durationSec: totalSec, completed, exercisesDone: exercisesDoneCount }; const updated = persistSession(entry); setSessions(updated); setSummaryStats({ totalSec, exercisesDone: exercisesDoneCount, streak: computeCurrentStreak(updated), partial: !completed }); AudioService.stopSpeech(); currentPhaseRef.current = null; setAppState(AppState.SUMMARY); };
   const advanceEntry = (finishedEntry: QueueEntry, finishedIndex: number) => { AudioService.phaseChange(); let doneCount = exercisesDone; if (!finishedEntry.isRest && finishedEntry.step?.kind === 'main') { doneCount += 1; setExercisesDone(doneCount); } const nextIndex = finishedIndex + 1; if (nextIndex >= queue.length) { AudioService.finishFanfare(); AudioService.announceCongrats(); finalizeSession(true, doneCount); return; } const nextEntry = queue[nextIndex]; setCurrentIndex(nextIndex); setSecondsLeft(nextEntry.seconds); if (nextEntry.phase !== currentPhaseRef.current) { currentPhaseRef.current = nextEntry.phase; setAppState(nextEntry.phase); AudioService.announcePhase(PHASE_SPANISH_KEY[nextEntry.phase]); } announceEntry(nextEntry); };
   const handleStart = () => { const newQueue = buildQueue(); if (!newQueue.length) return; setQueue(newQueue); setCurrentIndex(0); setExercisesDone(0); setSecondsLeft(newQueue[0].seconds); setSummaryStats(null); startTimeRef.current = Date.now(); currentPhaseRef.current = newQueue[0].phase; setAppState(newQueue[0].phase); AudioService.announcePhase(PHASE_SPANISH_KEY[newQueue[0].phase]); announceEntry(newQueue[0]); };
