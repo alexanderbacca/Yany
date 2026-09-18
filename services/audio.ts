@@ -1,228 +1,135 @@
-import { Exercise } from "../types";
+export class AudioService {
+  private static ctx: AudioContext | null = null;
+  private static spanishVoice: SpeechSynthesisVoice | null = null;
+  private static voicesListenerAttached = false;
 
-// Colombian Spanish TTS configuration
-const COLOMBIAN_VOICE_PREFERENCES = ["es-CO", "es-419", "es-US", "es-MX", "es"];
-
-let synth: SpeechSynthesis | null = null;
-let preferredVoice: SpeechSynthesisVoice | null = null;
-
-function getSynth(): SpeechSynthesis | null {
-  if (typeof window === "undefined") return null;
-  if (synth) return synth;
-  synth = window.speechSynthesis;
-  return synth;
-}
-
-function findColombianVoice(): SpeechSynthesisVoice | null {
-  const s = getSynth();
-  if (!s) return null;
-  
-  const voices = s.getVoices();
-  if (!voices || voices.length === 0) return null;
-  
-  // First priority: exact es-CO match
-  for (const voice of voices) {
-    if (voice.lang === "es-CO") {
-      return voice;
+  private static init() {
+    if (!this.ctx) {
+      const Ctor =
+        window.AudioContext || (window as any).webkitAudioContext;
+      if (Ctor) this.ctx = new Ctor();
+    }
+    if (this.ctx && this.ctx.state === 'suspended') {
+      void this.ctx.resume();
     }
   }
-  
-  // Second priority: Latin American Spanish variants (Colombia-friendly)
-  for (const pref of COLOMBIAN_VOICE_PREFERENCES) {
-    for (const voice of voices) {
-      if (voice.lang === pref || voice.lang.startsWith(pref.split("-")[0])) {
-        if (voice.name.toLowerCase().includes("colombia") || 
-            voice.name.toLowerCase().includes("latino") ||
-            voice.name.toLowerCase().includes("mexico") ||
-            voice.name.toLowerCase().includes("spanish")) {
-          return voice;
-        }
-      }
+
+  private static tone(
+    freq: number,
+    startOffsetSec: number,
+    durationSec: number,
+    volume = 0.2
+  ) {
+    this.init();
+    if (!this.ctx) return;
+
+    const start = this.ctx.currentTime + startOffsetSec;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + durationSec);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(start);
+    osc.stop(start + durationSec + 0.05);
+  }
+
+  static beep() {
+    this.tone(880, 0, 0.15);
+  }
+
+  static phaseChange() {
+    this.tone(660, 0, 0.2);
+    this.tone(990, 0.22, 0.2);
+  }
+
+  static finishFanfare() {
+    this.tone(523, 0, 0.25);
+    this.tone(659, 0.27, 0.25);
+    this.tone(784, 0.54, 0.35);
+  }
+
+  private static selectColombianSpanishVoice(
+    voices: SpeechSynthesisVoice[]
+  ): SpeechSynthesisVoice | null {
+    const exactColombian = voices.find(
+      (voice) => voice.lang.toLowerCase() === 'es-co'
+    );
+    if (exactColombian) return exactColombian;
+
+    const latinAmericanSpanish = voices.find((voice) => {
+      const language = voice.lang.toLowerCase();
+      return language === 'es-419' || language === 'es-mx' || language === 'es-us';
+    });
+    if (latinAmericanSpanish) return latinAmericanSpanish;
+
+    return voices.find((voice) => voice.lang.toLowerCase().startsWith('es')) ?? null;
+  }
+
+  private static ensureVoices() {
+    if (!('speechSynthesis' in window)) return;
+
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      this.spanishVoice = this.selectColombianSpanishVoice(voices);
+    }
+
+    if (!this.voicesListenerAttached) {
+      this.voicesListenerAttached = true;
+      window.speechSynthesis.addEventListener('voiceschanged', () => {
+        this.spanishVoice = this.selectColombianSpanishVoice(
+          window.speechSynthesis.getVoices()
+        );
+      });
     }
   }
-  
-  // Fallback: any Spanish voice
-  for (const voice of voices) {
-    if (voice.lang.startsWith("es")) {
-      return voice;
-    }
-  }
-  
-  return null;
-}
 
-// Initialize voice when voices are loaded
-function initializeVoice() {
-  const s = getSynth();
-  if (!s) return;
-  
-  if (s.onvoiceschanged !== undefined) {
-    s.onvoiceschanged = () => {
-      preferredVoice = findColombianVoice();
-    };
-  }
-  
-  // Try immediately in case voices are already loaded
-  preferredVoice = findColombianVoice();
-}
+  private static speak(text: string) {
+    if (!('speechSynthesis' in window)) return;
+    this.ensureVoices();
+    window.speechSynthesis.cancel();
 
-// Ensure voices are loaded (some browsers need this)
-function ensureVoicesLoaded(): Promise<void> {
-  return new Promise((resolve) => {
-    const s = getSynth();
-    if (!s) {
-      resolve();
-      return;
-    }
-    
-    if (s.getVoices().length > 0) {
-      preferredVoice = findColombianVoice();
-      resolve();
-      return;
-    }
-    
-    const loadVoices = () => {
-      preferredVoice = findColombianVoice();
-      s.onvoiceschanged = null;
-      resolve();
-    };
-    
-    s.onvoiceschanged = loadVoices;
-    setTimeout(loadVoices, 100);
-  });
-}
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'es-CO';
+    utterance.rate = 0.88;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    if (this.spanishVoice) utterance.voice = this.spanishVoice;
 
-export function playBeep() {
-  if (typeof window === "undefined") return;
-  
-  try {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.3);
-  } catch (e) {
-    console.warn("Audio beep not supported", e);
+    window.speechSynthesis.speak(utterance);
   }
-}
 
-export async function speakExerciseAnnouncement(
-  exercise: Exercise,
-  phase: "preparar" | "comenzar" | "descansar" | "finalizar"
-): Promise<void> {
-  const s = getSynth();
-  if (!s) return;
-  
-  await ensureVoicesLoaded();
-  
-  // Colombian Spanish-friendly phrasing
-  let message = "";
-  switch (phase) {
-    case "preparar":
-      message = `Prepá·¡rate para ${exercise.name}. Comenzamos en tres segundos.`;
-      break;
-    case "comenzar":
-      message = `Comencemos con ${exercise.name}. ¡Tienes ${exercise.duration} segundos!`;
-      break;
-    case "descansar":
-      message = `Muy bien. Ahora descansa ${exercise.rest} segundos antes del siguiente ejercicio.`;
-      break;
-    case "finalizar":
-      message = "Excelente trabajo. Has completado tu rutina de hoy.";
-      break;
+  static announceExercise(name: string, target: string) {
+    this.speak(`${name}. ${target}. Vamos con calma y a tu ritmo.`);
   }
-  
-  const utterance = new SpeechSynthesisUtterance(message);
-  utterance.lang = "es-CO";
-  utterance.rate = 0.9;  // Slightly slower for clarity (elderly-friendly)
-  utterance.pitch = 1.0;
-  utterance.volume = 1.0;
-  
-  if (preferredVoice) {
-    utterance.voice = preferredVoice;
-  }
-  
-  // Cancel any ongoing speech to avoid overlap
-  s.cancel();
-  s.speak(utterance);
-}
 
-export async function speakTimerComplete(exercise: Exercise): Promise<void> {
-  const s = getSynth();
-  if (!s) return;
-  
-  await ensureVoicesLoaded();
-  
-  const message = `Tiempo completado. ${exercise.name} finalizado.`;
-  
-  const utterance = new SpeechSynthesisUtterance(message);
-  utterance.lang = "es-CO";
-  utterance.rate = 0.9;
-  utterance.pitch = 1.0;
-  utterance.volume = 1.0;
-  
-  if (preferredVoice) {
-    utterance.voice = preferredVoice;
+  static announceRest() {
+    this.speak('Momento de descansar. Respira con tranquilidad.');
   }
-  
-  s.cancel();
-  s.speak(utterance);
-}
 
-export async function speakSessionStart(): Promise<void> {
-  const s = getSynth();
-  if (!s) return;
-  
-  await ensureVoicesLoaded();
-  
-  const message = "Bienvenida. Comencemos tu rutina de ejercicios de hoy.";
-  
-  const utterance = new SpeechSynthesisUtterance(message);
-  utterance.lang = "es-CO";
-  utterance.rate = 0.85;  // Extra slow and clear for elderly users
-  utterance.pitch = 1.0;
-  utterance.volume = 1.0;
-  
-  if (preferredVoice) {
-    utterance.voice = preferredVoice;
+  static announceNext(name: string) {
+    this.speak(`El siguiente ejercicio es: ${name}.`);
   }
-  
-  s.cancel();
-  s.speak(utterance);
-}
 
-export async function speakSessionComplete(): Promise<void> {
-  const s = getSynth();
-  if (!s) return;
-  
-  await ensureVoicesLoaded();
-  
-  const message = "Felicidades. Has terminado tu sesión. ¡Buen trabajo hoy!";
-  
-  const utterance = new SpeechSynthesisUtterance(message);
-  utterance.lang = "es-CO";
-  utterance.rate = 0.9;
-  utterance.pitch = 1.05;  // Slightly warmer tone
-  utterance.volume = 1.0;
-  
-  if (preferredVoice) {
-    utterance.voice = preferredVoice;
+  static announcePhase(phase: 'calentamiento' | 'circuito' | 'enfriamiento') {
+    const messages = {
+      calentamiento: 'Comenzamos el calentamiento. Haz cada movimiento con calma.',
+      circuito: 'Ahora sigue la parte principal de la rutina. Vas muy bien.',
+      enfriamiento: 'Empezamos el enfriamiento. Respira profundo y muévete suavemente.',
+    } as const;
+    this.speak(messages[phase]);
   }
-  
-  s.cancel();
-  s.speak(utterance);
-}
 
-// Initialize voice on module load
-if (typeof window !== "undefined") {
-  initializeVoice();
+  static announceCongrats() {
+    this.speak('¡Muy bien! Completaste tu rutina de hoy. Excelente trabajo.');
+  }
+
+  static stopSpeech() {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  }
 }

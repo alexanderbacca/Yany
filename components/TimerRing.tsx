@@ -7,25 +7,16 @@ interface TimerRingProps {
   isRest?: boolean;
 }
 
-export function TimerRing({ timeRemaining, totalTime, label, isRest = false }: TimerRingProps) {
+function TimerRing({ timeRemaining, totalTime, label, isRest = false }: TimerRingProps) {
   const progress = timeRemaining / totalTime;
   const circumference = 2 * Math.PI * 45;
   const strokeDashoffset = circumference * (1 - progress);
-  
+
   return (
     <div className="flex flex-col items-center justify-center">
       <div className="relative w-32 h-32">
         <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-          {/* Background circle */}
-          <circle
-            cx="50"
-            cy="50"
-            r="45"
-            fill="none"
-            stroke="#e5e7eb"
-            strokeWidth="8"
-          />
-          {/* Progress circle */}
+          <circle cx="50" cy="50" r="45" fill="none" stroke="#e5e7eb" strokeWidth="8" />
           <circle
             cx="50"
             cy="50"
@@ -44,9 +35,9 @@ export function TimerRing({ timeRemaining, totalTime, label, isRest = false }: T
         </div>
       </div>
       <p className="mt-4 text-lg font-medium text-gray-700">{label}</p>
-      {isRest && (
-        <p className="mt-1 text-sm text-amber-600">Tiempo de descanso</p>
-      )}
+      {isRest && <p className="mt-1 text-sm text-amber-600">Tiempo de descanso</p>}
     </div>
   );
 }
+
+export default TimerRing;
